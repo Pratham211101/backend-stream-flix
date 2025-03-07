@@ -46,7 +46,6 @@ const registerUser=asyncHandler(async (req,res)=>{
         throw new ErrorResponse(409,"user already exists with this username or email")
     }
     const avatarLocalPath=req.files?.avatar[0]?.path
-    const coverImageLocalPath=req.files?.coverImage[0]?.path
 
     if(!avatarLocalPath){
         throw new ErrorResponse(401,"avatar file missing")
@@ -134,8 +133,8 @@ const logOutUser=asyncHandler(async (req,res)=>{
     await User.findByIdAndUpdate(
         req.user._id,
         {
-            $set:{
-                refreshToken:undefined
+            $unset:{
+                refreshToken:1
                 
             }
         },
@@ -156,6 +155,7 @@ const refreshAccessToken=asyncHandler(async (req,res)=>{
     if(!incomingRefreshToken){
         throw new ErrorResponse(401,"refresh token is required")
     }
+    
     try {
         const decodedToken=jwt.verify(incomingRefreshToken,process.env.REFRESH_TOKEN_SECRET)       
         const user=await User.findById(decodedToken?._id)
@@ -168,7 +168,7 @@ const refreshAccessToken=asyncHandler(async (req,res)=>{
             throw new ErrorResponse(401,"invalid refresh token")
         }
 
-        const {accessToken,refreshToken:newRefreshToken}=await genrateAccessAndRefreshToken(user._id)
+        const { accessToken, refreshToken : newRefreshToken } = await genrateAccessAndRefreshToken(user._id)
         return res
         .status(200)
         .cookie("accessToken",accessToken,options)
