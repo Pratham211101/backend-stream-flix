@@ -54,6 +54,8 @@ userSchema.pre("save", async function (next) {
     this.password = await bcrypt.hash(this.password, 10)
     next()
 })
+//checks if the password is modified or not if moidified then we rehash it or just go next
+//.pre is a mongoose middleware that runs before the fn "save"
 
 
 userSchema.methods.isPasswordCorrect=async function(password){

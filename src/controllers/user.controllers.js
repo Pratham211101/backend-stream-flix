@@ -10,7 +10,9 @@ import { options } from "../constants.js"
 const genrateAccessAndRefreshToken=async(userId)=>{
     try {
         const user=await User.findById(userId)
-
+        if (!user) {
+            throw new Error("User not found");
+        }
         const accessToken=user.generateAccessToken()
         const refreshToken=user.generateRefreshToken()
         console.log(accessToken);
@@ -18,7 +20,7 @@ const genrateAccessAndRefreshToken=async(userId)=>{
         user.refreshToken=refreshToken
 
         await user.save({validateBeforeSave:false})
-        return {accessToken},{refreshToken}
+        return {accessToken,refreshToken}
 
     } catch (error) {
         console.log(error);
