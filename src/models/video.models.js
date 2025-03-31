@@ -6,7 +6,7 @@ const videoSchema= new Schema(
             type:Schema.Types.ObjectId,
             ref:"User"
         },
-        videofile:{
+        videoFile:{
             type:String,
             required:true
         },thumbnail:{
@@ -31,4 +31,4 @@ const videoSchema= new Schema(
     {timestamps:true}
 )
 videoSchema.plugin(mongooseAggregatePaginate)
-export const Video=mongoose.models("Video",videoSchema)
+export const Video=mongoose.model("Video",videoSchema)
