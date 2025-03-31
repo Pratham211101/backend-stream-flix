@@ -29,7 +29,6 @@ const genrateAccessAndRefreshToken=async(userId)=>{
     }
 }
 
-
 const registerUser=asyncHandler(async (req,res)=>{
     const{fullname,username,email,password}=req.body
     //validation
@@ -148,7 +147,6 @@ const logOutUser=asyncHandler(async (req,res)=>{
     .json(new ApiResponse(200,{},"user logged out succesfully"))
 })
 
-
 const refreshAccessToken=asyncHandler(async (req,res)=>{
     const incomingRefreshToken=req.cookies.refreshToken || req.body.refreshToken
 
@@ -199,7 +197,6 @@ const changeCurrentPassword = asyncHandler(async(req, res) => {
     .json(new ApiResponse(200, {}, "Password changed successfully"))
 })
 
-
 const getCurrentUser = asyncHandler(async(req, res) => {
     return res
     .status(200)
@@ -211,9 +208,9 @@ const getCurrentUser = asyncHandler(async(req, res) => {
 })
 
 const updateAccountDetails = asyncHandler(async(req, res) => {
-    const {fullName, email} = req.body
+    const {fullname, email} = req.body
 
-    if (!fullName || !email) {
+    if (!fullname || !email) {
         throw new ErrorResponse(400, "All fields are required")
     }
 
@@ -221,7 +218,7 @@ const updateAccountDetails = asyncHandler(async(req, res) => {
         req.user?._id,
         {
             $set: {
-                fullName,
+                fullname,
                 email: email
             }
         },
@@ -234,38 +231,47 @@ const updateAccountDetails = asyncHandler(async(req, res) => {
     .json(new ApiResponse(200, user, "Account details updated successfully"))
 });
 
-const updateUserAvatar = asyncHandler(async(req, res) => {
-    const avatarLocalPath = req.file?.path
+const updateUserAvatar = asyncHandler(async (req, res) => {
+    const avatarLocalPath = req.file?.path;
 
     if (!avatarLocalPath) {
-        throw new ErrorResponse(400, "Avatar file is missing")
+        throw new ErrorResponse(400, "Avatar file is missing");
     }
 
-    //TODO: delete old image - assignment
+    // Fetch the user to get the old avatar
+    
+    const user = await User.findById(req.user?._id);
+    if (!user) {
+        throw new ErrorResponse(404, "User not found");
+    }
 
-    const avatar = await uploadOnCloudinary(avatarLocalPath)
+    // Extract the public_id from the old avatar URL
+    const oldAvatarUrl = user.avatar;
+    const oldAvatarPublicId = oldAvatarUrl?.split("/").pop().split(".")[0];
 
+    // Upload new avatar
+    const avatar = await uploadOnCloudinary(avatarLocalPath);
     if (!avatar.url) {
-        throw new ErrorResponse(400, "Error while uploading on avatar")
-        
+        throw new ErrorResponse(400, "Error while uploading avatar");
     }
 
-    const user = await User.findByIdAndUpdate(
+    // Delete old avatar from Cloudinary (if exists)
+    if (oldAvatarPublicId) {
+        await deleteFromCloudinary(oldAvatarPublicId);
+    }
+
+    // Update user with new avatar
+    const updatedUser = await User.findByIdAndUpdate(
         req.user?._id,
-        {
-            $set:{
-                avatar: avatar.url
-            }
-        },
-        {new: true}
-    ).select("-password")
+        { $set: { avatar: avatar.url } },
+        { new: true }
+    ).select("-password");
 
     return res
-    .status(200)
-    .json(
-        new ApiResponse(200, user, "Avatar image updated successfully")
-    )
-})
+        .status(200)
+        .json(new ApiResponse(200, updatedUser, "Avatar image updated successfully"));
+});
+
 
 const updateUserCoverImage = asyncHandler(async(req, res) => {
     const coverImageLocalPath = req.file?.path
@@ -274,8 +280,8 @@ const updateUserCoverImage = asyncHandler(async(req, res) => {
         throw new ErrorResponse(400, "Cover image file is missing")
     }
 
-    //TODO: delete old image - assignment
-
+    
+   
 
     const coverImage = await uploadOnCloudinary(coverImageLocalPath)
 
@@ -283,8 +289,15 @@ const updateUserCoverImage = asyncHandler(async(req, res) => {
         throw new ErrorResponse(400, "Error while uploading on avatar")
         
     }
+    //TODO: delete old image - assignment
+    // const oldCoverUrl = user.coverImage;
+    // const oldCoverPublicId = oldCoverUrl?.split("/").pop().split(".")[0];
+    // if (oldCoverPublicId) {
+    //     await deleteFromCloudinary(oldCoverPublicId);
+    // }declare user and updated user seperately
 
     const user = await User.findByIdAndUpdate(
+        
         req.user?._id,
         {
             $set:{
@@ -294,6 +307,7 @@ const updateUserCoverImage = asyncHandler(async(req, res) => {
         {new: true}
     ).select("-password")
 
+    
     return res
     .status(200)
     .json(
@@ -350,7 +364,7 @@ const getUserChannelProfile = asyncHandler(async(req, res) => {
         },
         {
             $project: {
-                fullName: 1,
+                fullname: 1,
                 username: 1,
                 subscribersCount: 1,
                 channelsSubscribedToCount: 1,
@@ -397,7 +411,7 @@ const getWatchHistory = asyncHandler(async(req, res) => {
                             pipeline: [
                                 {
                                     $project: {
-                                        fullName: 1,
+                                        fullname: 1,
                                         username: 1,
                                         avatar: 1
                                     }
