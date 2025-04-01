@@ -109,10 +109,44 @@ const addComment = asyncHandler(async (req, res) => {
 
 const updateComment = asyncHandler(async (req, res) => {
     // TODO: update a comment
+    const {commentId} = req.params
+    const {content} = req.body
+    const userId=req.user._id
+    if(!isValidObjectId(commentId)){
+        throw new ErrorResponse(400, "valid commentId is required")
+    }
+    if(!content || typeof content !== 'string' || content.trim().length === 0){
+        throw new ErrorResponse(400, "content is required")
+    }
+    const comment = await Comment.findById(commentId);
+    if (!comment) {
+        throw new ErrorResponse(404, "Comment not found");
+    }
+    if (comment.owner.toString() !== userId.toString()) {
+        throw new ErrorResponse(403, "You are not authorized to update this comment");
+    }
+    comment.content = content.trim();
+    await comment.save({ validateBeforeSave: false });
+    return res.status(200).json(new ApiResponse(200, comment, "Comment updated successfully"));
 })
 
 const deleteComment = asyncHandler(async (req, res) => {
     // TODO: delete a comment
+    const {commentId} = req.params
+    const userId=req.user._id
+    if(!isValidObjectId(commentId)){
+        throw new ErrorResponse(400, "valid commentId is required")
+    }
+    const comment = await Comment.findById(commentId);
+    if (!comment) {
+        throw new ErrorResponse(404, "Comment not found");
+    }
+    if (comment.owner.toString() !== userId.toString()) {
+        throw new ErrorResponse(403, "You are not authorized to delete this comment");
+    }
+    
+    await Comment.findByIdAndDelete(commentId);
+    return res.status(200).json(new ApiResponse(200, {}, "Comment deleted successfully"));
 })
 
 export {

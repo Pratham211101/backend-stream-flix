@@ -15,8 +15,8 @@ const genrateAccessAndRefreshToken=async(userId)=>{
         }
         const accessToken=user.generateAccessToken()
         const refreshToken=user.generateRefreshToken()
-        console.log(accessToken);
-        console.log(refreshToken);
+        // console.log(accessToken);
+        // console.log(refreshToken);
         user.refreshToken=refreshToken
 
         await user.save({validateBeforeSave:false})
@@ -272,48 +272,46 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
         .json(new ApiResponse(200, updatedUser, "Avatar image updated successfully"));
 });
 
-
-const updateUserCoverImage = asyncHandler(async(req, res) => {
-    const coverImageLocalPath = req.file?.path
+const updateUserCoverImage = asyncHandler(async (req, res) => {
+    const coverImageLocalPath = req.file?.path;
 
     if (!coverImageLocalPath) {
-        throw new ErrorResponse(400, "Cover image file is missing")
+        throw new ErrorResponse(400, "coverImage file is missing");
     }
 
+    // Fetch the user to get the old coverImage
     
-   
+    const user = await User.findById(req.user?._id);
+    if (!user) {
+        throw new ErrorResponse(404, "User not found");
+    }
 
-    const coverImage = await uploadOnCloudinary(coverImageLocalPath)
+    // Extract the public_id from the old coverImage URL
+    const oldCoverImageUrl = user.coverImage;
+    const oldCoverImagePublicId = oldCoverImageUrl?.split("/").pop().split(".")[0];
 
+    // Upload new coverImage
+    const coverImage = await uploadOnCloudinary( coverImageLocalPath);
     if (!coverImage.url) {
-        throw new ErrorResponse(400, "Error while uploading on avatar")
-        
+        throw new ErrorResponse(400, "Error while uploading coverImage");
     }
-    //TODO: delete old image - assignment
-    // const oldCoverUrl = user.coverImage;
-    // const oldCoverPublicId = oldCoverUrl?.split("/").pop().split(".")[0];
-    // if (oldCoverPublicId) {
-    //     await deleteFromCloudinary(oldCoverPublicId);
-    // }declare user and updated user seperately
 
-    const user = await User.findByIdAndUpdate(
-        
+    // Delete old coverImage from Cloudinary (if exists)
+    if (oldCoverImagePublicId) {
+        await deleteFromCloudinary(oldCoverImagePublicId);
+    }
+
+    // Update user with new coverImage
+    const updatedUser = await User.findByIdAndUpdate(
         req.user?._id,
-        {
-            $set:{
-                coverImage: coverImage.url
-            }
-        },
-        {new: true}
-    ).select("-password")
+        { $set: { coverImage: coverImage.url } },
+        { new: true }
+    ).select("-password");
 
-    
     return res
-    .status(200)
-    .json(
-        new ApiResponse(200, user, "Cover image updated successfully")
-    )
-})
+        .status(200)
+        .json(new ApiResponse(200, updatedUser, "coverImage image updated successfully"));
+});
 
 
 const getUserChannelProfile = asyncHandler(async(req, res) => {
