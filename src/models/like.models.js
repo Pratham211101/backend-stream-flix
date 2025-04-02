@@ -5,7 +5,7 @@ const likeSchema=new Schema({
         ref:"Comment"
     },video:{
         type:Schema.Types.ObjectId,
-        ref:"Videos"
+        ref:"Video"
     },likedBy:{
         type:Schema.Types.ObjectId,
         ref:"User"
@@ -14,4 +14,4 @@ const likeSchema=new Schema({
         ref:"Tweet"
     }
 },{timestamps:true})
-export const Likes=mongoose.models("Likes",likeSchema)
+export const Likes=mongoose.model("Likes",likeSchema)
