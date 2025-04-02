@@ -9,10 +9,10 @@ const playlistSchema=new Schema(
         description:{
             type:String
         },
-        videos:{
+        videos:[{
             type:Schema.Types.ObjectId,
             ref:"Video"
-        },
+        }],
         owner:{
             type:Schema.Types.ObjectId,
             ref:"User"
@@ -21,4 +21,4 @@ const playlistSchema=new Schema(
     },
     {timestamps:true}
 )
-export const Playlist=mongoose.models("Playlist",playlistSchema)
+export const Playlist=mongoose.model("Playlist",playlistSchema)
