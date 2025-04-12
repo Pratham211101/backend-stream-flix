@@ -1,6 +1,6 @@
 import {asyncHandler} from "../utils/asyncHandler.js"
 import { ErrorResponse } from "../utils/ErrorResponse.js"
-import { ApiResponse } from "../utils/apiResponse.js"
+import { ApiResponse } from "../utils/ApiResponse.js"
 import {User} from "../models/user.models.js"
 import {deleteFromCloudinary, uploadOnCloudinary} from "../utils/cloudinary.js"
 

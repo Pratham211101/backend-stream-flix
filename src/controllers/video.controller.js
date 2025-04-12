@@ -1,7 +1,7 @@
 import mongoose, {isValidObjectId} from "mongoose"
 import {Video} from "../models/video.models.js"
 import {User} from "../models/user.models.js"
-import { ApiResponse } from "../utils/apiResponse.js"
+import { ApiResponse } from "../utils/ApiResponse.js"
 import {ErrorResponse} from "../utils/ErrorResponse.js"
 import {asyncHandler} from "../utils/asyncHandler.js"
 import {deleteFromCloudinary, uploadOnCloudinary,cloudinary} from "../utils/cloudinary.js"

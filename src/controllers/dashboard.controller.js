@@ -3,7 +3,7 @@ import {Video} from "../models/video.models.js"
 import {Subscription} from "../models/subscription.models.js"
 import {Likes} from "../models/like.models.js"
 import { ErrorResponse } from "../utils/ErrorResponse.js"
-import { ApiResponse } from "../utils/apiResponse.js"
+import { ApiResponse } from "../utils/ApiResponse.js"
 import {asyncHandler} from "../utils/asyncHandler.js"
 
 const getChannelStats = asyncHandler(async (req, res) => {
