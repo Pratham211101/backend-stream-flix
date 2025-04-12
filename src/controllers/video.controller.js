@@ -4,7 +4,7 @@ import {User} from "../models/user.models.js"
 import { ApiResponse } from "../utils/apiResponse.js"
 import {ErrorResponse} from "../utils/ErrorResponse.js"
 import {asyncHandler} from "../utils/asyncHandler.js"
-import {deleteFromCloudinary, uploadOnCloudinary} from "../utils/cloudinary.js"
+import {deleteFromCloudinary, uploadOnCloudinary,cloudinary} from "../utils/cloudinary.js"
 
 
 
@@ -96,46 +96,76 @@ const getAllVideos = asyncHandler(async (req, res) => {
 
 const publishAVideo = asyncHandler(async (req, res) => {
     const { title, description} = req.body
-    // TODO: get video, upload to cloudinary, create video
+    
     if (!title || !description) {
         throw new ErrorResponse(400, "Title and description are required");
     }
-    if (!req.files || !req.files.videoFile || !req.files.thumbnail) {
-        throw new ErrorResponse(400, "Video file and thumbnail are required");
+    if (!req.files || !req.files.videoFile) {
+        throw new ErrorResponse(400, "Video file is required");
     }
     // Get file paths from multer upload
     try {
         const videoFileLocalPath = req.files.videoFile[0]?.path;
-        const thumbnailLocalPath = req.files.thumbnail[0]?.path;
-        if (!videoFileLocalPath || !thumbnailLocalPath) {
-            throw new ErrorResponse(400, "Video file and thumbnail paths are missing");
+        const thumbnailLocalPath = req.files?.thumbnail?.[0]?.path;
+
+        if (!videoFileLocalPath) {
+            throw new ErrorResponse(400, "Video file path is missing");
         }
-        const videoFile = await uploadOnCloudinary(videoFileLocalPath);
-        const thumbnail = await uploadOnCloudinary(thumbnailLocalPath);
-        if (!videoFile?.url || !thumbnail?.url) {
-            throw new ErrorResponse(500, "Failed to upload files to Cloudinary");
+
+        // Upload video to Cloudinary
+        const videoFile = await uploadOnCloudinary(videoFileLocalPath, {
+            resource_type: "video"
+        });
+
+        if (!videoFile?.url) {
+            throw new ErrorResponse(500, "Failed to upload video to Cloudinary");
         }
-        // Create video document in mongoDB
+
+        let thumbnailUrl;
+
+        if (thumbnailLocalPath) {
+            const thumbnail = await uploadOnCloudinary(thumbnailLocalPath);
+            thumbnailUrl = thumbnail.url;
+        } else {
+            // Generate thumbnail from video
+            const videoPublicId = videoFile.public_id;
+            thumbnailUrl = cloudinary.url(`${videoPublicId}.jpg`, {
+                resource_type: "video",
+                format: "jpg",
+                transformation: [
+                    { width: 500, height: 300, crop: "fill" },
+                    { start_offset: "2" }
+                ]
+            });
+        }
+
+        // Save to DB
         const video = await Video.create({
             title,
             description,
             duration: videoFile.duration || 0,
             videoFile: videoFile.url,
-            thumbnail: thumbnail.url,
+            thumbnail: thumbnailUrl,
             owner: req.user._id,
             isPublished: true
         });
-    // Remove temporary files (optional)
-        deleteFromCloudinary(videoFileLocalPath)
-        deleteFromCloudinary(thumbnailLocalPath)
+
+        deleteFromCloudinary(videoFileLocalPath);
+        if (thumbnailLocalPath) deleteFromCloudinary(thumbnailLocalPath);
 
         return res.status(201).json(
             new ApiResponse(201, video, "Video published successfully")
         );
 
     } catch (error) {
-        if (req.files.videoFile[0]?.path) deleteFromCloudinary(req.files.videoFile[0]?.path)
-        if (req.files.thumbnail[0]?.path) deleteFromCloudinary(req.files.thumbnail[0]?.path)
+        if (req.files?.videoFile?.[0]?.path) {
+            deleteFromCloudinary(req.files.videoFile[0].path);
+        }
+    
+        if (req.files?.thumbnail?.[0]?.path) {
+            deleteFromCloudinary(req.files.thumbnail[0].path);
+        }
+    
         throw error;
     }
 })
@@ -277,11 +307,27 @@ const togglePublishStatus = asyncHandler(async (req, res) => {
     );
 })
 
+const increaseViews=asyncHandler(async(req,res)=>{
+    const video=await Video.findByIdAndUpdate(
+        req.params.id,
+        {$inc:{views:1}},
+        {new:true}
+    )
+    if (!video) {
+        throw new ErrorResponse(404, "Video not found");
+    }
+    return res.status(200).json(
+        new ApiResponse(200, {views:video.views},"view cnt increased" )
+    );
+
+})
+
 export {
     getAllVideos,
     publishAVideo,
     getVideoById,
     updateVideo,
     deleteVideo,
-    togglePublishStatus
+    togglePublishStatus,
+    increaseViews
 }

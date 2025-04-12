@@ -34,4 +34,4 @@ const deleteFromCloudinary=async (publicId)=>{
     }
 }
 
-export {uploadOnCloudinary,deleteFromCloudinary}   //functions to del and upload files on cloudinary
+export {uploadOnCloudinary,deleteFromCloudinary,cloudinary}   //functions to del and upload files on cloudinary

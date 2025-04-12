@@ -46,6 +46,9 @@ const registerUser=asyncHandler(async (req,res)=>{
         throw new ErrorResponse(409,"user already exists with this username or email")
     }
     const avatarLocalPath=req.files?.avatar[0]?.path
+    
+    const coverImageLocalPath = req.files?.coverImage[0]?.path;
+    
 
     if(!avatarLocalPath){
         throw new ErrorResponse(401,"avatar file missing")
@@ -211,8 +214,8 @@ const getCurrentUser = asyncHandler(async(req, res) => {
 const updateAccountDetails = asyncHandler(async(req, res) => {
     const {fullname, email} = req.body
 
-    if (!fullname || !email) {
-        throw new ErrorResponse(400, "All fields are required")
+    if (!fullname && !email) {
+        throw new ErrorResponse(400, "atleast one field is required")
     }
 
     const user = await User.findByIdAndUpdate(

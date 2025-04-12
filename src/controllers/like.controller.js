@@ -64,9 +64,36 @@ const getLikedVideos = asyncHandler(async (req, res) => {
 
 })
 
+const getLikeCount = asyncHandler(async (req, res) => {
+    const { videoId } = req.params
+    if (!isValidObjectId(videoId)) {
+        throw new ErrorResponse(400, "Invalid video id")
+    }
+
+    const count = await Likes.countDocuments({ video: videoId })
+    return res.status(200).json(new ApiResponse(200, { count }, "Like count fetched"))
+})
+const checkIfLiked = asyncHandler(async (req, res) => {
+    const { videoId } = req.params;
+    if (!isValidObjectId(videoId)) {
+      throw new ErrorResponse(400, "Invalid video ID");
+    }
+  
+    const alreadyLiked = await Likes.findOne({
+      video: videoId,
+      likedBy: req.user._id,
+    });
+  
+    return res.status(200).json(
+      new ApiResponse(200, { liked: !!alreadyLiked }, "Like status fetched")
+    );
+  });
+
 export {
     toggleCommentLike,
     // toggleTweetLike,
     toggleVideoLike,
-    getLikedVideos
+    getLikedVideos,
+    getLikeCount,
+    checkIfLiked
 }

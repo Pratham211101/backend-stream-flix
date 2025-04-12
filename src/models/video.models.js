@@ -11,7 +11,6 @@ const videoSchema= new Schema(
             required:true
         },thumbnail:{
             type:String,
-            required:true
         },title:{
             type:String,
             rquired:true
