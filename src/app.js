@@ -1,8 +1,8 @@
 import express from 'express'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
-const bodyParser = require("body-parser"); 
-router.use(bodyParser.json());
+// import bodyParser from 'body-parser';
+// router.use(bodyParser.json());
 const app=express()
 
 app.use(
