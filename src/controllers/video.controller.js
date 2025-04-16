@@ -322,6 +322,42 @@ const increaseViews=asyncHandler(async(req,res)=>{
 
 })
 
+const getAllUserVideos = asyncHandler(async (req, res) => {
+    const { userId } = req.params
+    console.log(userId)
+    if (!isValidObjectId(userId)) {
+        throw new ErrorResponse(400, "Invalid user ID");
+    }
+    const videos = await Video.find({ owner: userId }).populate("owner", "username avatar fullname");
+    if (!videos) {
+        throw new ErrorResponse(404, "Videos not found");
+    }
+    return res.status(200).json(
+        new ApiResponse(200, videos, "Videos fetched successfully")
+    );
+}
+)
+
+const getVideoByTitle = asyncHandler(async (req, res) => {
+    const { q: title } = req.query;
+
+    if (!title) {
+        throw new ErrorResponse(400, "Title is required");
+    }
+
+    const videos = await Video.find({ 
+        title: { $regex: title, $options: "i" } 
+    }).populate("owner", "username avatar fullname");
+
+    if (!videos || videos.length === 0) {
+        throw new ErrorResponse(404, "Video not found");
+    }
+
+    return res.status(200).json(
+        new ApiResponse(200, videos, "Video(s) fetched successfully")
+    );
+});
+
 export {
     getAllVideos,
     publishAVideo,
@@ -329,5 +365,7 @@ export {
     updateVideo,
     deleteVideo,
     togglePublishStatus,
-    increaseViews
+    increaseViews,
+    getAllUserVideos,
+    getVideoByTitle
 }

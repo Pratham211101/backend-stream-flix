@@ -12,7 +12,8 @@ import {
     updateUserCoverImage, 
     getUserChannelProfile, 
     getWatchHistory, 
-    updateAccountDetails 
+    updateAccountDetails ,
+    addToWatchHistory
 } from "../controllers/user.controllers.js";
 
 const router=Router()
@@ -44,6 +45,7 @@ router.route("/cover-image").patch(verifyJWT, upload.single("coverImage"), updat
 
 router.route("/c/:username").get(verifyJWT, getUserChannelProfile)
 router.route("/history").get(verifyJWT, getWatchHistory)
+router.route("/history/:videoId").patch(verifyJWT, addToWatchHistory)
 
 
 export default router

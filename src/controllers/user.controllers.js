@@ -444,6 +444,30 @@ const getWatchHistory = asyncHandler(async(req, res) => {
     )
 })
 
+const addToWatchHistory = asyncHandler(async (req, res) => {
+    const { videoId } = req.params;
+  
+    if (!videoId) {
+      return res.status(400).json(new ApiResponse(400, null, "Video ID is required"));
+    }
+  
+    const userId = req.user._id;
+  
+    // Pull if exists (remove old), then push to front
+    await User.findByIdAndUpdate(userId, {
+      $pull: { watchHistory: videoId } // Remove if already there
+    });
+  
+    await User.findByIdAndUpdate(userId, {
+      $push: { watchHistory: { $each: [videoId], $position: 0 } } // Add to start
+    });
+  
+    return res
+      .status(200)
+      .json(new ApiResponse(200, null, "Video added to watch history"));
+  });
+  
+
 
 export {
     registerUser,
@@ -456,6 +480,7 @@ export {
     updateUserAvatar,
     updateUserCoverImage,
     getUserChannelProfile,
-    getWatchHistory
+    getWatchHistory,
+    addToWatchHistory
 }
 

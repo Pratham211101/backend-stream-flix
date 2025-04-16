@@ -58,11 +58,22 @@ const toggleCommentLike = asyncHandler(async (req, res) => {
 // )
 
 const getLikedVideos = asyncHandler(async (req, res) => {
-    //TODO: get all liked videos
-    const likedVideos = await Likes.find({likedBy: req.user._id, video: {$exists: true}}).populate("video")
-    return res.status(200).json(new ApiResponse(200, likedVideos, "Liked videos fetched successfully"))
-
-})
+    const likedVideos = await Likes.find({
+      likedBy: req.user._id,
+      video: { $exists: true }
+    }).populate({
+      path: "video",
+      populate: {
+        path: "owner",
+        select: "fullname" // only the fields you need from the user
+      }
+    });
+  
+    return res
+      .status(200)
+      .json(new ApiResponse(200, likedVideos, "Liked videos fetched successfully"));
+  });
+  
 
 const getLikeCount = asyncHandler(async (req, res) => {
     const { videoId } = req.params
