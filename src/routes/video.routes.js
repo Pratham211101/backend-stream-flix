@@ -13,10 +13,10 @@ import {
 import {verifyJWT} from "../middlewares/auth.middleware.js"
 import {upload} from "../middlewares/multer.middleware.js"
 
-const router = Router('/:videoId').get(getVideoById);
+const router = Router();
 router.route("/title/search").get(getVideoByTitle);
 router.route('/').get(getAllVideos);
-router.route()
+router.route('/:videoId').get(getVideoById)
 router.use(verifyJWT); // Apply verifyJWT middleware to all routes in this file
 
 router
