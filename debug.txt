@@ -1,8 +1,0 @@
-login
-change-password
-update account details
-....not working with form data in body 
-getwatchhistory
-getuserprofile
-
-delete coverimage after updating

@@ -45,18 +45,20 @@ const registerUser=asyncHandler(async (req,res)=>{
     if(duplicateUser){
         throw new ErrorResponse(409,"user already exists with this username or email")
     }
-    const avatarLocalPath=req.files?.avatar[0]?.path
+    const avatarLocalPath=req.files?.avatar?.[0]?.buffer;
+    const avatarName = req.files?.avatar?.[0]?.originalname;
     
-    const coverImageLocalPath = req.files?.coverImage[0]?.path;
+    const coverImageLocalPath = req.files?.coverImage[0]?.buffer;
+    const coverImageName = req.files?.coverImage?.[0]?.originalname;
     
 
     if(!avatarLocalPath){
         throw new ErrorResponse(401,"avatar file missing")
     }
-    const avatar=await uploadOnCloudinary(avatarLocalPath)
+    const avatar=await uploadOnCloudinary(avatarLocalPath,avatarName)
     let coverImage=""
     if(coverImageLocalPath){
-        coverImage=await uploadOnCloudinary(coverImageLocalPath)
+        coverImage=await uploadOnCloudinary(coverImageLocalPath,coverImageName)
     }
 
     
@@ -70,6 +72,8 @@ const registerUser=asyncHandler(async (req,res)=>{
             password,
             username:username.toLowerCase()
         })
+        const { accessToken, refreshToken } = await genrateAccessAndRefreshToken(user._id);
+
         const createdUser= await User.findById(user._id).select(
             "-password -refreshTokens"
         )
@@ -78,6 +82,8 @@ const registerUser=asyncHandler(async (req,res)=>{
         }
         return res
         .status(201)
+        .cookie("accessToken", accessToken, options)
+        .cookie("refreshToken", refreshToken, options)
         .json(new ApiResponse(200,createdUser,"user registered successfully"))
     } catch (error) {
         console.log("user creation failed");
