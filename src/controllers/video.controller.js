@@ -105,15 +105,17 @@ const publishAVideo = asyncHandler(async (req, res) => {
     }
     // Get file paths from multer upload
     try {
-        const videoFileLocalPath = req.files.videoFile[0]?.path;
-        const thumbnailLocalPath = req.files?.thumbnail?.[0]?.path;
+        const videoFileLocalPath = req.files.videoFile[0]?.buffer;
+        const videoFileName = req.files.videoFile[0]?.originalname;
+        const thumbnailLocalPath = req.files?.thumbnail?.[0]?.buffer;
+        const thumbnailFileName = req.files?.thumbnail?.[0]?.originalname;
 
         if (!videoFileLocalPath) {
             throw new ErrorResponse(400, "Video file path is missing");
         }
 
         // Upload video to Cloudinary
-        const videoFile = await uploadOnCloudinary(videoFileLocalPath, {
+        const videoFile = await uploadOnCloudinary(videoFileLocalPath,videoFileName, {
             resource_type: "video"
         });
 
@@ -124,7 +126,7 @@ const publishAVideo = asyncHandler(async (req, res) => {
         let thumbnailUrl;
 
         if (thumbnailLocalPath) {
-            const thumbnail = await uploadOnCloudinary(thumbnailLocalPath);
+            const thumbnail = await uploadOnCloudinary(thumbnailLocalPath,thumbnailFileName);
             thumbnailUrl = thumbnail.url;
         } else {
             // Generate thumbnail from video
