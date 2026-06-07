@@ -3,10 +3,28 @@ import { ErrorResponse } from "../utils/ErrorResponse.js"
 import { ApiResponse } from "../utils/ApiResponse.js"
 import {User} from "../models/user.models.js"
 import {deleteFromCloudinary, uploadOnCloudinary} from "../utils/cloudinary.js"
+import { sendOTPEmail } from "../utils/mail.utils.js"
+import { OAuth2Client } from "google-auth-library"
 
 import jwt from "jsonwebtoken"
 import mongoose from "mongoose"
 import { options } from "../constants.js"
+
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
+
+const getAccessTokenOptions = (rememberMe) => {
+    return {
+        ...options,
+        ...(rememberMe ? { maxAge: 1 * 24 * 60 * 60 * 1000 } : {})
+    }
+}
+
+const getRefreshTokenOptions = (rememberMe) => {
+    return {
+        ...options,
+        ...(rememberMe ? { maxAge: 10 * 24 * 60 * 60 * 1000 } : {})
+    }
+}
 
 const genrateAccessAndRefreshToken=async(userId)=>{
     try {
@@ -112,6 +130,10 @@ const loginUser=asyncHandler(async(req,res)=>{
         throw new ErrorResponse(404, "User does not exist")
     }
 
+    if (!user.isVerified) {
+        throw new ErrorResponse(403, "Please verify your email before logging in. An OTP was sent to your email.")
+    }
+
     const isPasswordValid = await user.isPasswordCorrect(password)
     
     if (!isPasswordValid) {
@@ -122,10 +144,12 @@ const loginUser=asyncHandler(async(req,res)=>{
 
     const loggedInUser = await User.findById(user._id).select("-password -refreshToken")
 
+    const rememberMe = Boolean(req.body.rememberMe)
+
     return res
     .status(200)
-    .cookie("accessToken", accessToken, options)
-    .cookie("refreshToken", refreshToken, options)
+    .cookie("accessToken", accessToken, getAccessTokenOptions(rememberMe))
+    .cookie("refreshToken", refreshToken, getRefreshTokenOptions(rememberMe))
     .json(
         new ApiResponse(
             200, 
@@ -479,7 +503,310 @@ const addToWatchHistory = asyncHandler(async (req, res) => {
       .json(new ApiResponse(200, null, "Video added to watch history"));
   });
   
+const getWatchLater = asyncHandler(async(req, res) => {
+    const user = await User.aggregate([
+        {
+            $match: {
+                _id: new mongoose.Types.ObjectId(req.user._id)
+            }
+        },
+        {
+            $lookup: {
+                from: "videos",
+                localField: "watchLater",
+                foreignField: "_id",
+                as: "watchLater",
+                pipeline: [
+                    {
+                        $lookup: {
+                            from: "users",
+                            localField: "owner",
+                            foreignField: "_id",
+                            as: "owner",
+                            pipeline: [
+                                {
+                                    $project: {
+                                        fullname: 1,
+                                        username: 1,
+                                        avatar: 1
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        $addFields:{
+                            owner:{
+                                $first: "$owner"
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+    ])
 
+    return res
+    .status(200)
+    .json(
+        new ApiResponse(
+            200,
+            user[0]?.watchLater || [],
+            "Watch later videos fetched successfully"
+        )
+    )
+})
+
+const toggleWatchLater = asyncHandler(async (req, res) => {
+    const { videoId } = req.params;
+  
+    if (!videoId) {
+      return res.status(400).json(new ApiResponse(400, null, "Video ID is required"));
+    }
+  
+    const userId = req.user._id;
+    const user = await User.findById(userId);
+    if (!user) {
+        throw new ErrorResponse(404, "User not found");
+    }
+
+    const isAlreadyAdded = user.watchLater.includes(videoId);
+
+    if (isAlreadyAdded) {
+        await User.findByIdAndUpdate(userId, {
+            $pull: { watchLater: videoId }
+        });
+        return res
+            .status(200)
+            .json(new ApiResponse(200, { added: false }, "Removed from watch later"));
+    } else {
+        await User.findByIdAndUpdate(userId, {
+            $push: { watchLater: videoId }
+        });
+        return res
+            .status(200)
+            .json(new ApiResponse(200, { added: true }, "Added to watch later"));
+    }
+});
+  
+
+
+const sendOTP = asyncHandler(async (req, res) => {
+    const { username, email, fullname, password } = req.body;
+
+    if (!username || !email || !fullname || !password) {
+        throw new ErrorResponse(400, "All fields are required for sign up");
+    }
+
+    // Check if verified user already exists
+    const existingUser = await User.findOne({
+        $or: [{ username }, { email }]
+    });
+
+    if (existingUser && existingUser.isVerified) {
+        throw new ErrorResponse(409, "User already exists with this username or email");
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    let user = existingUser;
+    if (user) {
+        // Update details of existing unverified user
+        user.username = username.toLowerCase();
+        user.fullname = fullname;
+        user.password = password; // pre-save hashes it
+        user.otp = otp;
+        user.otpExpiry = otpExpiry;
+    } else {
+        // Create unverified user
+        user = new User({
+            username: username.toLowerCase(),
+            email: email.toLowerCase(),
+            fullname,
+            password,
+            avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&h=150&fit=crop", // default avatar
+            isVerified: false,
+            otp,
+            otpExpiry
+        });
+    }
+
+    await user.save();
+
+    const emailSent = await sendOTPEmail(email, otp);
+    if (!emailSent) {
+        throw new ErrorResponse(500, "Failed to send OTP email");
+    }
+
+    return res.status(200).json(
+        new ApiResponse(200, { email }, "OTP sent to your email. Please verify.")
+    );
+});
+
+const verifyOTP = asyncHandler(async (req, res) => {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+        throw new ErrorResponse(400, "Email and OTP are required");
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+        throw new ErrorResponse(404, "User not found");
+    }
+
+    if (!user.otp || user.otp !== otp || new Date() > user.otpExpiry) {
+        throw new ErrorResponse(400, "Invalid or expired OTP");
+    }
+
+    // Mark user as verified
+    user.isVerified = true;
+    user.otp = undefined;
+    user.otpExpiry = undefined;
+    await user.save({ validateBeforeSave: false });
+
+    // Generate tokens
+    const { accessToken, refreshToken } = await genrateAccessAndRefreshToken(user._id);
+
+    const loggedInUser = await User.findById(user._id).select("-password -refreshToken");
+
+    const rememberMe = Boolean(req.body.rememberMe);
+
+    return res
+        .status(200)
+        .cookie("accessToken", accessToken, getAccessTokenOptions(rememberMe))
+        .cookie("refreshToken", refreshToken, getRefreshTokenOptions(rememberMe))
+        .json(
+            new ApiResponse(
+                200,
+                { user: loggedInUser, accessToken, refreshToken },
+                "User verified and logged in successfully"
+            )
+        );
+});
+
+const forgotPasswordOTP = asyncHandler(async (req, res) => {
+    const { email } = req.body;
+
+    if (!email) {
+        throw new ErrorResponse(400, "Email is required");
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+        throw new ErrorResponse(404, "User with this email does not exist");
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    user.otp = otp;
+    user.otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    await user.save({ validateBeforeSave: false });
+
+    const emailSent = await sendOTPEmail(email, otp);
+    if (!emailSent) {
+        throw new ErrorResponse(500, "Failed to send OTP email");
+    }
+
+    return res.status(200).json(
+        new ApiResponse(200, { email }, "OTP sent to your email for password reset")
+    );
+});
+
+const resetPassword = asyncHandler(async (req, res) => {
+    const { email, otp, newPassword } = req.body;
+
+    if (!email || !otp || !newPassword) {
+        throw new ErrorResponse(400, "Email, OTP and new password are required");
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+        throw new ErrorResponse(404, "User not found");
+    }
+
+    if (!user.otp || user.otp !== otp || new Date() > user.otpExpiry) {
+        throw new ErrorResponse(400, "Invalid or expired OTP");
+    }
+
+    user.password = newPassword;
+    user.otp = undefined;
+    user.otpExpiry = undefined;
+    await user.save(); // triggers pre-save hash
+
+    return res.status(200).json(
+        new ApiResponse(200, {}, "Password reset successfully")
+    );
+});
+
+const googleLogin = asyncHandler(async (req, res) => {
+    const { credential } = req.body;
+
+    if (!credential) {
+        throw new ErrorResponse(400, "Credential (idToken) is required");
+    }
+
+    let payload;
+    try {
+        const ticket = await googleClient.verifyIdToken({
+            idToken: credential,
+            audience: process.env.GOOGLE_CLIENT_ID,
+        });
+        payload = ticket.getPayload();
+    } catch (error) {
+        console.error("Google verify ID Token error:", error);
+        throw new ErrorResponse(400, "Invalid Google Token");
+    }
+
+    const { email, name, picture, sub: googleId } = payload;
+
+    // Check if user exists with googleId or email
+    let user = await User.findOne({ $or: [{ googleId }, { email: email.toLowerCase() }] });
+
+    if (user) {
+        // Link googleId if not already present
+        if (!user.googleId) {
+            user.googleId = googleId;
+            if (!user.avatar) {
+                user.avatar = picture;
+            }
+            await user.save({ validateBeforeSave: false });
+        }
+    } else {
+        // Create new user via Google Sign-In
+        // Generate a random username from email
+        const baseUsername = email.split("@")[0].replace(/[^a-zA-Z0-9]/g, "");
+        const uniqueUsername = `${baseUsername}${Math.floor(100 + Math.random() * 900)}`;
+
+        user = await User.create({
+            username: uniqueUsername.toLowerCase(),
+            email: email.toLowerCase(),
+            fullname: name,
+            avatar: picture || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&h=150&fit=crop",
+            googleId,
+            isVerified: true,
+        });
+    }
+
+    // Generate tokens
+    const { accessToken, refreshToken } = await genrateAccessAndRefreshToken(user._id);
+
+    const loggedInUser = await User.findById(user._id).select("-password -refreshToken");
+
+    const rememberMe = req.body.rememberMe !== undefined ? Boolean(req.body.rememberMe) : true;
+
+    return res
+        .status(200)
+        .cookie("accessToken", accessToken, getAccessTokenOptions(rememberMe))
+        .cookie("refreshToken", refreshToken, getRefreshTokenOptions(rememberMe))
+        .json(
+            new ApiResponse(
+                200,
+                { user: loggedInUser, accessToken, refreshToken },
+                "Logged in with Google successfully"
+            )
+        );
+});
 
 export {
     registerUser,
@@ -493,6 +820,13 @@ export {
     updateUserCoverImage,
     getUserChannelProfile,
     getWatchHistory,
-    addToWatchHistory
+    addToWatchHistory,
+    getWatchLater,
+    toggleWatchLater,
+    sendOTP,
+    verifyOTP,
+    forgotPasswordOTP,
+    resetPassword,
+    googleLogin
 }
 

@@ -1,6 +1,7 @@
 import mongoose, {isValidObjectId} from "mongoose"
 import {User} from "../models/user.models.js"
 import { Subscription } from "../models/subscription.models.js"
+import { Video } from "../models/video.models.js"
 import { ErrorResponse } from "../utils/ErrorResponse.js"
 import { ApiResponse } from "../utils/ApiResponse.js"
 import {asyncHandler} from "../utils/asyncHandler.js"
@@ -82,8 +83,54 @@ const getSubscribedChannels = asyncHandler(async (req, res) => {
     return res.status(200).json(new ApiResponse(200, channels, "Channels fetched successfully"))
 })
 
+const getSubscriptionVideos = asyncHandler(async (req, res) => {
+    const subscriberId = req.user._id;
+    const { page = 1, limit = 16 } = req.query;
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+
+    if (isNaN(pageNum) || isNaN(limitNum) || pageNum < 1 || limitNum < 1) {
+        throw new ErrorResponse(400, "Invalid pagination parameters");
+    }
+
+    // Find all channels user is subscribed to
+    const subscriptions = await Subscription.find({ subscriber: subscriberId });
+    const channelIds = subscriptions.map(sub => sub.channel);
+
+    let query = { isPublished: true };
+    let message = "Subscription feed fetched successfully";
+
+    if (channelIds.length > 0) {
+        query.owner = { $in: channelIds };
+    } else {
+        message = "No subscriptions found. Showing recommended videos instead.";
+    }
+
+    const videos = await Video.find(query)
+        .sort({ createdAt: -1 })
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum)
+        .populate("owner", "username avatar fullname");
+
+    const totalVideos = await Video.countDocuments(query);
+
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            {
+                videos,
+                currentPage: pageNum,
+                totalPages: Math.ceil(totalVideos / limitNum),
+                hasNextPage: pageNum * limitNum < totalVideos
+            },
+            message
+        )
+    );
+});
+
 export {
     toggleSubscription,
     getUserChannelSubscribers,
-    getSubscribedChannels
+    getSubscribedChannels,
+    getSubscriptionVideos
 }

@@ -37,19 +37,39 @@ const userSchema=new Schema(
                 ref:"Video"
             }
         ],
+        watchLater:[
+            {
+                type:mongoose.Schema.Types.ObjectId,
+                ref:"Video"
+            }
+        ],
         password:{
-            type:String,
-            required:[true,"password is required"]
+            type:String
         },
         refreshToken:{
             type:String
+        },
+        otp:{
+            type:String
+        },
+        otpExpiry:{
+            type:Date
+        },
+        isVerified:{
+            type:Boolean,
+            default:false
+        },
+        googleId:{
+            type:String,
+            sparse:true,
+            unique:true
         }
     },
     {timestamps:true}
 )
 
 userSchema.pre("save", async function (next) {
-    if(!this.isModified("password")) return next();
+    if(!this.isModified("password") || !this.password) return next();
 
     this.password = await bcrypt.hash(this.password, 10)
     next()
@@ -59,9 +79,8 @@ userSchema.pre("save", async function (next) {
 
 
 userSchema.methods.isPasswordCorrect=async function(password){
-    
+    if (!this.password) return false;
     return await bcrypt.compare(password,this.password)
-    
 }
 
 

@@ -9,7 +9,7 @@ import {deleteFromCloudinary, uploadOnCloudinary,cloudinary} from "../utils/clou
 
 
 const getAllVideos = asyncHandler(async (req, res) => {
-    const { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query
+    const { page = 1, limit = 10, query, sortBy, sortType, userId, category } = req.query
     //TODO: get all videos based on query, sort, pagination
     const pageNumber=parseInt(page)
     const limitNumber=parseInt(limit)
@@ -25,6 +25,10 @@ const getAllVideos = asyncHandler(async (req, res) => {
             throw new ErrorResponse(400, "Invalid user ID");
         }
         baseQuery.owner = new mongoose.Types.ObjectId(userId);
+    }
+    //category filter
+    if (category && category !== "All") {
+        baseQuery.category = category;
     }
     //add text search 
     if (query) {
@@ -74,7 +78,8 @@ const getAllVideos = asyncHandler(async (req, res) => {
                 videoFile: 1,
                 owner: 1,
                 createdAt: 1,
-                isPublished: 1
+                isPublished: 1,
+                category: 1
             }
         }
     ]);
@@ -95,62 +100,82 @@ const getAllVideos = asyncHandler(async (req, res) => {
 })
 
 const publishAVideo = asyncHandler(async (req, res) => {
-    const { title, description} = req.body
-    
-    if (!title || !description) {
-        throw new ErrorResponse(400, "Title and description are required");
-    }
-    if (!req.files || !req.files.videoFile) {
-        throw new ErrorResponse(400, "Video file is required");
-    }
-    // Get file paths from multer upload
-    try {
-        const videoFileLocalPath = req.files.videoFile[0]?.buffer;
-        const videoFileName = req.files.videoFile[0]?.originalname;
-        const thumbnailLocalPath = req.files?.thumbnail?.[0]?.buffer;
-        const thumbnailFileName = req.files?.thumbnail?.[0]?.originalname;
-
-        if (!videoFileLocalPath) {
-            throw new ErrorResponse(400, "Video file path is missing");
+        const { title, description, category } = req.body
+        
+        if (!title || !description) {
+            throw new ErrorResponse(400, "Title and description are required");
         }
-
-        // Upload video to Cloudinary
-        const videoFile = await uploadOnCloudinary(videoFileLocalPath,videoFileName, {
-            resource_type: "video"
-        });
-
-        if (!videoFile?.url) {
-            throw new ErrorResponse(500, "Failed to upload video to Cloudinary");
+        
+        let parsedCategories = [];
+        if (category) {
+            if (typeof category === 'string') {
+                try {
+                    parsedCategories = JSON.parse(category);
+                } catch {
+                    parsedCategories = category.split(',').map(c => c.trim());
+                }
+            } else if (Array.isArray(category)) {
+                parsedCategories = category;
+            }
         }
+        
+        const allowedCategories = ["Gaming", "Music", "News", "Sports", "Learning", "Fashion", "Podcasts"];
+        const finalCategories = parsedCategories.filter(c => allowedCategories.includes(c));
 
-        let thumbnailUrl;
+        if (!req.files || !req.files.videoFile) {
+            throw new ErrorResponse(400, "Video file is required");
+        }
+        // Get file paths from multer upload
+        try {
+            const videoFileLocalPath = req.files.videoFile[0]?.buffer;
+            const videoFileName = req.files.videoFile[0]?.originalname;
+            const thumbnailLocalPath = req.files?.thumbnail?.[0]?.buffer;
+            const thumbnailFileName = req.files?.thumbnail?.[0]?.originalname;
 
-        if (thumbnailLocalPath) {
-            const thumbnail = await uploadOnCloudinary(thumbnailLocalPath,thumbnailFileName);
-            thumbnailUrl = thumbnail.url;
-        } else {
-            // Generate thumbnail from video
-            const videoPublicId = videoFile.public_id;
-            thumbnailUrl = cloudinary.url(`${videoPublicId}.jpg`, {
-                resource_type: "video",
-                format: "jpg",
-                transformation: [
-                    { width: 500, height: 300, crop: "fill" },
-                    { start_offset: "2" }
-                ]
+            if (!videoFileLocalPath) {
+                throw new ErrorResponse(400, "Video file path is missing");
+            }
+
+            // Upload video to Cloudinary
+            const videoFile = await uploadOnCloudinary(videoFileLocalPath,videoFileName, {
+                resource_type: "video"
             });
-        }
 
-        // Save to DB
-        const video = await Video.create({
-            title,
-            description,
-            duration: videoFile.duration || 0,
-            videoFile: videoFile.url,
-            thumbnail: thumbnailUrl,
-            owner: req.user._id,
-            isPublished: true
-        });
+            if (!videoFile?.url) {
+                throw new ErrorResponse(500, "Failed to upload video to Cloudinary");
+            }
+
+            let thumbnailUrl;
+
+            if (thumbnailLocalPath) {
+                const thumbnail = await uploadOnCloudinary(thumbnailLocalPath,thumbnailFileName);
+                thumbnailUrl = thumbnail.url;
+            } else {
+                // Generate thumbnail from video
+                const videoPublicId = videoFile.public_id;
+                thumbnailUrl = cloudinary.url(videoPublicId, {
+                    resource_type: "video",
+                    format: "jpg",
+                    transformation: [
+                        { width: 500, height: 300, crop: "fill" },
+                        { start_offset: "2" }
+                    ]
+                });
+            }
+
+            // Save to DB
+            const video = await Video.create({
+                title,
+                description,
+                duration: videoFile.duration || 0,
+                videoFile: videoFile.url,
+                thumbnail: thumbnailUrl,
+                owner: req.user._id,
+                isPublished: req.body.isPublished !== undefined
+                    ? (typeof req.body.isPublished === 'string' ? req.body.isPublished === 'true' : Boolean(req.body.isPublished))
+                    : true,
+                category: finalCategories
+            });
 
         deleteFromCloudinary(videoFileLocalPath);
         if (thumbnailLocalPath) deleteFromCloudinary(thumbnailLocalPath);
@@ -211,9 +236,9 @@ const updateVideo = asyncHandler(async (req, res) => {
     }
 
     const thumbnailLocalPath = req.file?.path
-    const { title, description } = req.body;
-    if (!title && !description && !thumbnailLocalPath) {
-        throw new ErrorResponse(400, "At least one field (title, description, thumbnail) is required");
+    const { title, description, isPublished } = req.body;
+    if (!title && !description && !thumbnailLocalPath && isPublished === undefined) {
+        throw new ErrorResponse(400, "At least one field (title, description, thumbnail, visibility) is required");
     }
     
     if (thumbnailLocalPath) {
@@ -231,12 +256,16 @@ const updateVideo = asyncHandler(async (req, res) => {
         );
         
     }
+    const updateFields = {
+        title: title !== undefined ? title : video.title,
+        description: description !== undefined ? description : video.description,
+    };
+    if (isPublished !== undefined) {
+        updateFields.isPublished = typeof isPublished === 'string' ? isPublished === 'true' : Boolean(isPublished);
+    }
     const updatedVideo = await Video.findByIdAndUpdate(
         videoId,
-        {
-            title: title || video.title,
-            description: description || video.description,
-        },
+        updateFields,
         { new: true}
     );
     if (!updatedVideo) {
@@ -326,19 +355,23 @@ const increaseViews=asyncHandler(async(req,res)=>{
 
 const getAllUserVideos = asyncHandler(async (req, res) => {
     const { userId } = req.params
-    console.log(userId)
     if (!isValidObjectId(userId)) {
         throw new ErrorResponse(400, "Invalid user ID");
     }
-    const videos = await Video.find({ owner: userId }).populate("owner", "username avatar fullname");
+    
+    const query = { owner: userId };
+    if (!req.user || req.user._id.toString() !== userId.toString()) {
+        query.isPublished = true;
+    }
+
+    const videos = await Video.find(query).populate("owner", "username avatar fullname");
     if (!videos) {
         throw new ErrorResponse(404, "Videos not found");
     }
     return res.status(200).json(
         new ApiResponse(200, videos, "Videos fetched successfully")
     );
-}
-)
+})
 
 const getVideoByTitle = asyncHandler(async (req, res) => {
     const { q: title } = req.query;

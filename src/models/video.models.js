@@ -25,6 +25,9 @@ const videoSchema= new Schema(
         },isPublished:{
             type:Boolean,
             defualt:true
+        },category:{
+            type: [String],
+            default: []
         }
     },
     {timestamps:true}

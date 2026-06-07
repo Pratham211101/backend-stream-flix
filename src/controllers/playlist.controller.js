@@ -9,12 +9,12 @@ const createPlaylist = asyncHandler(async (req, res) => {
     const {name, description} = req.body
 
     //TODO: create playlist
-    if(!name || !description){
-        throw new ErrorResponse(400,"name and description are required")
+    if(!name){
+        throw new ErrorResponse(400,"name is required")
     }
     const playlist = await Playlist.create({
         name,
-        description,
+        description: description || "",
         owner: req.user._id
     })
     res.status(201).json(new ApiResponse(201,playlist,"playlist created successfully"))
@@ -34,7 +34,13 @@ const getUserPlaylists = asyncHandler(async (req, res) => {
 const getPlaylistById = asyncHandler(async (req, res) => {
     const {playlistId} = req.params
     //TODO: get playlist by id
-    const playlist = await Playlist.findById(playlistId)
+    const playlist = await Playlist.findById(playlistId).populate({
+        path: "videos",
+        populate: {
+            path: "owner",
+            select: "username avatar fullname"
+        }
+    })
     if(!playlist){
         throw new ErrorResponse(404, "playlist not found")
     }
